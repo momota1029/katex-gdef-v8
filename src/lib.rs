@@ -85,13 +85,13 @@ fn main() {
 }
 ```
 
-## Comparison with `latex-rs`
+## Comparison with `katex-rs`
 
 * **Macro collection and reuse**: Ability to reuse macros defined in equations in subsequent renderings (main differentiating feature)
 * **Caching capability**: Fast initialization with V8 snapshots
 * **Single-thread optimization**: Shared KaTeX instance in one worker thread (though not suitable for parallel processing)
 
-Note that `latex-rs` supports more JavaScript engines (duktape, wasm-js, etc.), making it more versatile in that respect.
+Note that `katex-rs` supports more JavaScript engines (duktape, wasm-js, etc.), making it more versatile in that respect.
 
 ## License
 
