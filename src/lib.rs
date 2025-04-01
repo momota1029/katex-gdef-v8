@@ -177,7 +177,7 @@ static KATEX_CODE: &str = concat!(
 );
 
 #[derive(Debug, Serialize)]
-pub struct Input<'a> {
+struct Input<'a> {
     pub latex: &'a str,
     pub options: &'a Options,
     pub macros: &'a mut BTreeMap<String, String>,
@@ -230,28 +230,9 @@ pub enum KatexOutput {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum Output {
+enum Output {
     Success { html: String, macros: BTreeMap<String, String> },
     Error { error: String, macros: BTreeMap<String, String> },
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MacroExpansion {
-    #[serde(default)]
-    pub delimiters: Vec<Vec<String>>,
-    #[serde(default)]
-    pub num_args: i32,
-    #[serde(default)]
-    pub tokens: Vec<MacroToken>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MacroToken {
-    pub text: String,
-    pub noexpand: Option<bool>,
-    pub treat_as_relax: Option<bool>,
 }
 
 pub struct KatexWorker(Sender<(String, Sender<Result<String, Error>>)>);
