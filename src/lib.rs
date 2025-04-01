@@ -336,7 +336,7 @@ pub fn font_extract(html: &str) -> UsedFonts {
     let mut flags = UsedFonts::default();
     let mut tokenizer = Tokenizer::new(
         FontSink {
-            font_stack: vec![Font { family: FontFamilies::Main, bold: false, italic: false, delimisizing_mult: false }],
+            font_stack: vec![Font { family: FontFamilies::Main, bold: false, italic: false, delimisizing_mult: false, html: false }],
             font_flags: &mut flags,
         },
         TokenizerOpts::default(),
@@ -370,10 +370,13 @@ impl TokenSink for FontSink<'_> {
                                 delimsizing |= class == "delimsizing";
                                 mult |= class == "mult";
                                 op_symbol |= class == "op-symbol";
+                                last.html |= class == "katex-html";
                             }
                             last.delimisizing_mult |= delimsizing && mult;
                             for class in attr.value.split_whitespace() {
-                                font_stack_set(&mut last, class, delimsizing, op_symbol);
+                                if last.html {
+                                    font_stack_set(&mut last, class, delimsizing, op_symbol);
+                                }
                             }
                         }
                     }
@@ -395,6 +398,7 @@ struct Font {
     family: FontFamilies,
     bold: bool,
     italic: bool,
+    html: bool,
     delimisizing_mult: bool, // has span.delimsizing.mult as parent
 }
 #[derive(Debug, Clone, Copy)]
