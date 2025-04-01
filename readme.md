@@ -1,4 +1,4 @@
-# katex-v8
+# katex-gdef-v8
 
 A Rust library that utilizes KaTeX (v0.16.21) through the V8 engine to render LaTeX math expressions to HTML.
 
@@ -15,7 +15,7 @@ Add this to your Cargo.toml:
 
 ```toml
 [dependencies]
-katex-v8 = "0.1.0"
+katex-gdef-v8 = "0.1.0"
 ```
 
 ## Usage
@@ -23,7 +23,7 @@ katex-v8 = "0.1.0"
 ### Basic Example
 
 ```rust
-use katex_v8::render;
+use katex_gdef_v8::render;
 
 fn main() {
     // KaTeX is initialized automatically on first call
@@ -35,7 +35,7 @@ fn main() {
 ### Using Options and Macros
 
 ```rust
-use katex_v8::{render_with_opts, Options, KatexOutput};
+use katex_gdef_v8::{render_with_opts, Options, KatexOutput};
 use std::collections::BTreeMap;
 use std::borrow::Cow;
 
@@ -71,7 +71,7 @@ fn main() {
 ### Setting Up Cache
 
 ```rust
-use katex_v8::{set_cache, render};
+use katex_gdef_v8::{set_cache, render};
 use std::path::Path;
 
 fn main() {
