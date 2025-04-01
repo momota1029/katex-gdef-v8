@@ -311,16 +311,21 @@ pub fn render_with_opts(latex: &str, options: &Options, macros: &mut BTreeMap<St
     }
 }
 
-pub fn font_extract(html: &str, flags: &mut FontFlags) {
+pub fn font_extract(html: &str) -> FontFlags {
+    let mut flags = FontFlags::default();
     let mut tokenizer = Tokenizer::new(
-        FontSink { font_stack: vec![Font { family: FontFamilies::Main, bold: false, italic: false }], font_flags: flags },
+        FontSink {
+            font_stack: vec![Font { family: FontFamilies::Main, bold: false, italic: false, delimisizing_mult: false }],
+            font_flags: &mut flags,
+        },
         TokenizerOpts::default(),
     );
     let mut queue = BufferQueue::default();
     queue.push_back(html.into());
 
     let _ = tokenizer.feed(&mut queue);
-    tokenizer.end()
+    tokenizer.end();
+    flags
 }
 
 struct FontSink<'a> {
@@ -332,15 +337,22 @@ impl TokenSink for FontSink<'_> {
     fn process_token(&mut self, token: Token, _: u64) -> TokenSinkResult<Self::Handle> {
         match token {
             Token::TagToken(tag) => match tag.kind {
-                html5ever::tokenizer::TagKind::EndTag => {
+                html5ever::tokenizer::TagKind::EndTag if &tag.name.to_ascii_lowercase() == "span" => {
                     self.font_stack.pop();
                 }
                 html5ever::tokenizer::TagKind::StartTag if &tag.name.to_ascii_lowercase() == "span" => {
                     let mut last = *self.font_stack.last().unwrap();
                     for attr in &tag.attrs {
                         if &attr.name.local.to_ascii_lowercase() == "class" {
+                            let (mut delimsizing, mut mult, mut op_symbol) = (false, false, false);
                             for class in attr.value.split_whitespace() {
-                                font_stack_set(&mut last, class)
+                                delimsizing |= class == "delimsizing";
+                                mult |= class == "mult";
+                                op_symbol |= class == "op-symbol";
+                            }
+                            last.delimisizing_mult |= delimsizing && mult;
+                            for class in attr.value.split_whitespace() {
+                                font_stack_set(&mut last, class, delimsizing, op_symbol);
                             }
                         }
                     }
@@ -362,6 +374,7 @@ struct Font {
     family: FontFamilies,
     bold: bool,
     italic: bool,
+    delimisizing_mult: bool, // has span.delimsizing.mult as parent
 }
 #[derive(Debug, Clone, Copy)]
 enum FontFamilies {
@@ -379,7 +392,7 @@ enum FontFamilies {
     Typewriter,
 }
 #[inline(always)]
-fn font_stack_set(font: &mut Font, class: &str) {
+fn font_stack_set(font: &mut Font, class: &str, delimisizing: bool, op_symbol: bool) {
     match class {
         "textbf" => font.bold = true,
         "textit" => font.italic = true,
@@ -425,15 +438,20 @@ fn font_stack_set(font: &mut Font, class: &str) {
             font.family = FontFamilies::Main;
             font.italic = false
         }
-        "size1" | "delim-size1" | "small-op" => font.family = FontFamilies::Size1,
-        "size2" | "large-op" => font.family = FontFamilies::Size2,
-        "size3" => font.family = FontFamilies::Size3,
-        "size4" | "delim-size4" => font.family = FontFamilies::Size4,
+        // "mult" => font.delimisizing_mult = true,
+        "size1" if delimisizing => font.family = FontFamilies::Size1,
+        "size2" if delimisizing => font.family = FontFamilies::Size2,
+        "size3" if delimisizing => font.family = FontFamilies::Size3,
+        "size4" if delimisizing => font.family = FontFamilies::Size4,
+        "delim-size1" if font.delimisizing_mult => font.family = FontFamilies::Size1,
+        "delim-size4" if font.delimisizing_mult => font.family = FontFamilies::Size4,
+        "small-op" if op_symbol => font.family = FontFamilies::Size1,
+        "large-op" if op_symbol => font.family = FontFamilies::Size2,
         _ => (),
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, Hash, Deserialize, Serialize)]
 pub struct FontFlags {
     katex_ams_regular: bool,
     katex_caligraphic_bold: bool,
@@ -480,6 +498,52 @@ impl Default for FontFlags {
             katex_size4_regular: false,
             katex_typewriter_regular: false,
         }
+    }
+}
+impl FontFlags {
+    pub fn is_empty(&self) -> bool {
+        !self.katex_ams_regular
+            && !self.katex_caligraphic_bold
+            && !self.katex_caligraphic_regular
+            && !self.katex_fraktur_bold
+            && !self.katex_fraktur_regular
+            && !self.katex_main_bold
+            && !self.katex_main_bolditalic
+            && !self.katex_main_italic
+            && !self.katex_main_regular
+            && !self.katex_math_bolditalic
+            && !self.katex_math_italic
+            && !self.katex_sansserif_bold
+            && !self.katex_sansserif_italic
+            && !self.katex_sansserif_regular
+            && !self.katex_script_regular
+            && !self.katex_size1_regular
+            && !self.katex_size2_regular
+            && !self.katex_size3_regular
+            && !self.katex_size4_regular
+            && !self.katex_typewriter_regular
+    }
+    pub fn merge(&mut self, other: FontFlags) {
+        self.katex_ams_regular |= other.katex_ams_regular;
+        self.katex_caligraphic_bold |= other.katex_caligraphic_bold;
+        self.katex_caligraphic_regular |= other.katex_caligraphic_regular;
+        self.katex_fraktur_bold |= other.katex_fraktur_bold;
+        self.katex_fraktur_regular |= other.katex_fraktur_regular;
+        self.katex_main_bold |= other.katex_main_bold;
+        self.katex_main_bolditalic |= other.katex_main_bolditalic;
+        self.katex_main_italic |= other.katex_main_italic;
+        self.katex_main_regular |= other.katex_main_regular;
+        self.katex_math_bolditalic |= other.katex_math_bolditalic;
+        self.katex_math_italic |= other.katex_math_italic;
+        self.katex_sansserif_bold |= other.katex_sansserif_bold;
+        self.katex_sansserif_italic |= other.katex_sansserif_italic;
+        self.katex_sansserif_regular |= other.katex_sansserif_regular;
+        self.katex_script_regular |= other.katex_script_regular;
+        self.katex_size1_regular |= other.katex_size1_regular;
+        self.katex_size2_regular |= other.katex_size2_regular;
+        self.katex_size3_regular |= other.katex_size3_regular;
+        self.katex_size4_regular |= other.katex_size4_regular;
+        self.katex_typewriter_regular |= other.katex_typewriter_regular;
     }
 }
 impl Iterator for FontFlags {
