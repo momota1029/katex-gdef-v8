@@ -99,6 +99,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 */
 
 use deno_core::{JsRuntime, RuntimeOptions, error::CoreError, v8};
+use html5ever::tokenizer::{BufferQueue, Token, TokenSink, TokenSinkResult, Tokenizer, TokenizerOpts};
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -307,5 +308,296 @@ pub fn render_with_opts(latex: &str, options: &Options, macros: &mut BTreeMap<St
         Output::Error { error, macros: macros_value } => {
             Err(Error::KaTeXError { message: error, latex: latex.to_string(), macros: macros_value })
         }
+    }
+}
+
+pub fn font_extract(html: &str, flags: &mut FontFlags) {
+    let mut tokenizer = Tokenizer::new(
+        FontSink { font_stack: vec![Font { family: FontFamilies::Main, bold: false, italic: false }], font_flags: flags },
+        TokenizerOpts::default(),
+    );
+    let mut queue = BufferQueue::default();
+    queue.push_back(html.into());
+
+    let _ = tokenizer.feed(&mut queue);
+    tokenizer.end()
+}
+
+struct FontSink<'a> {
+    font_stack: Vec<Font>,
+    font_flags: &'a mut FontFlags,
+}
+impl TokenSink for FontSink<'_> {
+    type Handle = ();
+    fn process_token(&mut self, token: Token, _: u64) -> TokenSinkResult<Self::Handle> {
+        match token {
+            Token::TagToken(tag) => match tag.kind {
+                html5ever::tokenizer::TagKind::EndTag => {
+                    self.font_stack.pop();
+                }
+                html5ever::tokenizer::TagKind::StartTag if &tag.name.to_ascii_lowercase() == "span" => {
+                    let mut last = *self.font_stack.last().unwrap();
+                    for attr in &tag.attrs {
+                        if &attr.name.local.to_ascii_lowercase() == "class" {
+                            for class in attr.value.split_whitespace() {
+                                font_stack_set(&mut last, class)
+                            }
+                        }
+                    }
+                    self.font_stack.push(last);
+                }
+                _ => (),
+            },
+            Token::CharacterTokens(tendril) if !tendril.trim().is_empty() => {
+                font_flag_set(*self.font_stack.last().unwrap(), &mut self.font_flags)
+            }
+            _ => (),
+        }
+        TokenSinkResult::Continue
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Font {
+    family: FontFamilies,
+    bold: bool,
+    italic: bool,
+}
+#[derive(Debug, Clone, Copy)]
+enum FontFamilies {
+    AMS,
+    Caligraphic,
+    Fraktur,
+    Main,
+    Math,
+    SansSerif,
+    Script,
+    Size1,
+    Size2,
+    Size3,
+    Size4,
+    Typewriter,
+}
+#[inline(always)]
+fn font_stack_set(font: &mut Font, class: &str) {
+    match class {
+        "textbf" => font.bold = true,
+        "textit" => font.italic = true,
+        "textrm" => font.family = FontFamilies::Main,
+        "mathsf" | "textsf" => font.family = FontFamilies::SansSerif,
+        "texttt" => font.family = FontFamilies::Typewriter,
+        "mathnormal" => {
+            font.family = FontFamilies::Math;
+            font.italic = true
+        }
+        "mathit" => {
+            font.family = FontFamilies::Main;
+            font.italic = true
+        }
+        "mathrm" => font.italic = false,
+        "mathbf" => {
+            font.family = FontFamilies::Main;
+            font.bold = true
+        }
+        "boldsymbol" => {
+            font.family = FontFamilies::Math;
+            font.bold = true;
+            font.italic = true
+        }
+        "amsrm" | "mathbb" | "textbb" => font.family = FontFamilies::AMS,
+        "mathcal" => font.family = FontFamilies::Caligraphic,
+        "mathfrak" | "textfrak" => font.family = FontFamilies::Fraktur,
+        "mathboldfrak" | "textboldfrak" => {
+            font.family = FontFamilies::Fraktur;
+            font.bold = true
+        }
+        "mathtt" => font.family = FontFamilies::Typewriter,
+        "mathscr" => font.family = FontFamilies::Script,
+        "mathboldsf" | "textboldsf" => {
+            font.family = FontFamilies::SansSerif;
+            font.bold = true
+        }
+        "mathsfit" | "mathitsf" | "textitsf" => {
+            font.family = FontFamilies::SansSerif;
+            font.italic = true
+        }
+        "mainrm" => {
+            font.family = FontFamilies::Main;
+            font.italic = false
+        }
+        "size1" | "delim-size1" | "small-op" => font.family = FontFamilies::Size1,
+        "size2" | "large-op" => font.family = FontFamilies::Size2,
+        "size3" => font.family = FontFamilies::Size3,
+        "size4" | "delim-size4" => font.family = FontFamilies::Size4,
+        _ => (),
+    }
+}
+
+#[derive(Debug)]
+pub struct FontFlags {
+    katex_ams_regular: bool,
+    katex_caligraphic_bold: bool,
+    katex_caligraphic_regular: bool,
+    katex_fraktur_bold: bool,
+    katex_fraktur_regular: bool,
+    katex_main_bold: bool,
+    katex_main_bolditalic: bool,
+    katex_main_italic: bool,
+    katex_main_regular: bool,
+    katex_math_bolditalic: bool,
+    katex_math_italic: bool,
+    katex_sansserif_bold: bool,
+    katex_sansserif_italic: bool,
+    katex_sansserif_regular: bool,
+    katex_script_regular: bool,
+    katex_size1_regular: bool,
+    katex_size2_regular: bool,
+    katex_size3_regular: bool,
+    katex_size4_regular: bool,
+    katex_typewriter_regular: bool,
+}
+impl Default for FontFlags {
+    fn default() -> Self {
+        FontFlags {
+            katex_ams_regular: false,
+            katex_caligraphic_bold: false,
+            katex_caligraphic_regular: false,
+            katex_fraktur_bold: false,
+            katex_fraktur_regular: false,
+            katex_main_bold: false,
+            katex_main_bolditalic: false,
+            katex_main_italic: false,
+            katex_main_regular: false,
+            katex_math_bolditalic: false,
+            katex_math_italic: false,
+            katex_sansserif_bold: false,
+            katex_sansserif_italic: false,
+            katex_sansserif_regular: false,
+            katex_script_regular: false,
+            katex_size1_regular: false,
+            katex_size2_regular: false,
+            katex_size3_regular: false,
+            katex_size4_regular: false,
+            katex_typewriter_regular: false,
+        }
+    }
+}
+impl Iterator for FontFlags {
+    type Item = &'static str;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.katex_ams_regular {
+            self.katex_ams_regular = false;
+            return Some("KaTeX_AMS-Regular");
+        }
+        if self.katex_caligraphic_bold {
+            self.katex_caligraphic_bold = false;
+            return Some("KaTeX_Caligraphic-Bold");
+        }
+        if self.katex_caligraphic_regular {
+            self.katex_caligraphic_regular = false;
+            return Some("KaTeX_Caligraphic-Regular");
+        }
+        if self.katex_fraktur_bold {
+            self.katex_fraktur_bold = false;
+            return Some("KaTeX_Fraktur-Bold");
+        }
+        if self.katex_fraktur_regular {
+            self.katex_fraktur_regular = false;
+            return Some("KaTeX_Fraktur-Regular");
+        }
+        if self.katex_main_bold {
+            self.katex_main_bold = false;
+            return Some("KaTeX_Main-Bold");
+        }
+        if self.katex_main_bolditalic {
+            self.katex_main_bolditalic = false;
+            return Some("KaTeX_Main-BoldItalic");
+        }
+        if self.katex_main_italic {
+            self.katex_main_italic = false;
+            return Some("KaTeX_Main-Italic");
+        }
+        if self.katex_main_regular {
+            self.katex_main_regular = false;
+            return Some("KaTeX_Main-Regular");
+        }
+        if self.katex_math_bolditalic {
+            self.katex_math_bolditalic = false;
+            return Some("KaTeX_Math-BoldItalic");
+        }
+        if self.katex_math_italic {
+            self.katex_math_italic = false;
+            return Some("KaTeX_Math-Italic");
+        }
+        if self.katex_sansserif_bold {
+            self.katex_sansserif_bold = false;
+            return Some("KaTeX_SansSerif-Bold");
+        }
+        if self.katex_sansserif_italic {
+            self.katex_sansserif_italic = false;
+            return Some("KaTeX_SansSerif-Italic");
+        }
+        if self.katex_sansserif_regular {
+            self.katex_sansserif_regular = false;
+            return Some("KaTeX_SansSerif-Regular");
+        }
+        if self.katex_script_regular {
+            self.katex_script_regular = false;
+            return Some("KaTeX_Script-Regular");
+        }
+        if self.katex_size1_regular {
+            self.katex_size1_regular = false;
+            return Some("KaTeX_Size1-Regular");
+        }
+        if self.katex_size2_regular {
+            self.katex_size2_regular = false;
+            return Some("KaTeX_Size2-Regular");
+        }
+        if self.katex_size3_regular {
+            self.katex_size3_regular = false;
+            return Some("KaTeX_Size3-Regular");
+        }
+        if self.katex_size4_regular {
+            self.katex_size4_regular = false;
+            return Some("KaTeX_Size4-Regular");
+        }
+        if self.katex_typewriter_regular {
+            self.katex_typewriter_regular = false;
+            return Some("KaTeX_Typewriter-Regular");
+        }
+        None
+    }
+}
+#[inline(always)]
+fn font_flag_set(font: Font, flags: &mut FontFlags) {
+    match font.family {
+        FontFamilies::AMS => flags.katex_ams_regular = true,
+        FontFamilies::Caligraphic if font.bold => flags.katex_caligraphic_bold = true,
+        FontFamilies::Caligraphic => flags.katex_caligraphic_regular = true,
+        FontFamilies::Fraktur if font.bold => flags.katex_fraktur_bold = true,
+        FontFamilies::Fraktur => flags.katex_fraktur_regular = true,
+        FontFamilies::Main => match (font.bold, font.italic) {
+            (false, false) => flags.katex_main_regular = true,
+            (true, false) => flags.katex_main_bold = true,
+            (false, true) => flags.katex_main_italic = true,
+            (true, true) => flags.katex_main_bolditalic = true,
+        },
+        FontFamilies::Math if font.bold => flags.katex_math_bolditalic = true,
+        FontFamilies::Math => flags.katex_math_italic = true,
+        FontFamilies::SansSerif => match (font.bold, font.italic) {
+            (false, false) => flags.katex_sansserif_regular = true,
+            (true, false) => flags.katex_sansserif_bold = true,
+            (false, true) => flags.katex_sansserif_italic = true,
+            (true, true) => {
+                flags.katex_sansserif_bold = true;
+                flags.katex_sansserif_italic = true
+            }
+        },
+        FontFamilies::Script => flags.katex_script_regular = true,
+        FontFamilies::Size1 => flags.katex_size1_regular = true,
+        FontFamilies::Size2 => flags.katex_size2_regular = true,
+        FontFamilies::Size3 => flags.katex_size3_regular = true,
+        FontFamilies::Size4 => flags.katex_size4_regular = true,
+        FontFamilies::Typewriter => flags.katex_typewriter_regular = true,
     }
 }
