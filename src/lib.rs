@@ -17,7 +17,7 @@ Add this to your Cargo.toml:
 
 ```toml
 [dependencies]
-katex-gdef-v8 = "0.1.0"
+katex-gdef-v8 = "0.1.3"
 ```
 
 ## Usage
@@ -235,8 +235,8 @@ enum Output {
     Error { error: String, macros: BTreeMap<String, String> },
 }
 
-pub struct KatexWorker(Sender<(String, Sender<Result<String, Error>>)>);
-pub static KATEX_WORKER: OnceCell<KatexWorker> = OnceCell::new();
+struct KatexWorker(Sender<(String, Sender<Result<String, Error>>)>);
+static KATEX_WORKER: OnceCell<KatexWorker> = OnceCell::new();
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -332,8 +332,8 @@ pub fn render_with_opts(latex: &str, options: &Options, macros: &mut BTreeMap<St
     }
 }
 
-pub fn font_extract(html: &str) -> FontFlags {
-    let mut flags = FontFlags::default();
+pub fn font_extract(html: &str) -> UsedFonts {
+    let mut flags = UsedFonts::default();
     let mut tokenizer = Tokenizer::new(
         FontSink {
             font_stack: vec![Font { family: FontFamilies::Main, bold: false, italic: false, delimisizing_mult: false }],
@@ -351,7 +351,7 @@ pub fn font_extract(html: &str) -> FontFlags {
 
 struct FontSink<'a> {
     font_stack: Vec<Font>,
-    font_flags: &'a mut FontFlags,
+    font_flags: &'a mut UsedFonts,
 }
 impl TokenSink for FontSink<'_> {
     type Handle = ();
@@ -473,7 +473,7 @@ fn font_stack_set(font: &mut Font, class: &str, delimisizing: bool, op_symbol: b
 }
 
 #[derive(Debug, Clone, Copy, Hash, Deserialize, Serialize)]
-pub struct FontFlags {
+pub struct UsedFonts {
     katex_ams_regular: bool,
     katex_caligraphic_bold: bool,
     katex_caligraphic_regular: bool,
@@ -495,9 +495,9 @@ pub struct FontFlags {
     katex_size4_regular: bool,
     katex_typewriter_regular: bool,
 }
-impl Default for FontFlags {
+impl Default for UsedFonts {
     fn default() -> Self {
-        FontFlags {
+        UsedFonts {
             katex_ams_regular: false,
             katex_caligraphic_bold: false,
             katex_caligraphic_regular: false,
@@ -521,7 +521,7 @@ impl Default for FontFlags {
         }
     }
 }
-impl FontFlags {
+impl UsedFonts {
     pub fn is_empty(&self) -> bool {
         !self.katex_ams_regular
             && !self.katex_caligraphic_bold
@@ -544,7 +544,7 @@ impl FontFlags {
             && !self.katex_size4_regular
             && !self.katex_typewriter_regular
     }
-    pub fn merge(&mut self, other: FontFlags) {
+    pub fn merge(&mut self, other: UsedFonts) {
         self.katex_ams_regular |= other.katex_ams_regular;
         self.katex_caligraphic_bold |= other.katex_caligraphic_bold;
         self.katex_caligraphic_regular |= other.katex_caligraphic_regular;
@@ -567,7 +567,7 @@ impl FontFlags {
         self.katex_typewriter_regular |= other.katex_typewriter_regular;
     }
 }
-impl Iterator for FontFlags {
+impl Iterator for UsedFonts {
     type Item = &'static str;
     fn next(&mut self) -> Option<Self::Item> {
         if self.katex_ams_regular {
@@ -654,7 +654,7 @@ impl Iterator for FontFlags {
     }
 }
 #[inline(always)]
-fn font_flag_set(font: Font, flags: &mut FontFlags) {
+fn font_flag_set(font: Font, flags: &mut UsedFonts) {
     match font.family {
         FontFamilies::AMS => flags.katex_ams_regular = true,
         FontFamilies::Caligraphic if font.bold => flags.katex_caligraphic_bold = true,
