@@ -139,7 +139,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 */
 
 use deno_core::{JsRuntime, RuntimeOptions, error::CoreError, v8};
-use html5ever::tokenizer::{BufferQueue, Token, TokenSink, TokenSinkResult, Tokenizer, TokenizerOpts};
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -332,80 +331,68 @@ pub fn render_with_opts(latex: &str, options: &Options, macros: &mut BTreeMap<St
     }
 }
 
+#[inline(always)]
 pub fn font_extract(html: &str) -> UsedFonts {
-    let mut flags = UsedFonts::default();
-    let mut tokenizer = Tokenizer::new(
-        FontSink {
-            font_stack: vec![Font { family: FontFamilies::Main, bold: false, italic: false, delimisizing_mult: false, html: false }],
-            font_flags: &mut flags,
-        },
-        TokenizerOpts::default(),
-    );
-    let mut queue = BufferQueue::default();
-    queue.push_back(html.into());
-
-    let _ = tokenizer.feed(&mut queue);
-    tokenizer.end();
-    flags
-}
-
-struct FontSink<'a> {
-    font_stack: Vec<Font>,
-    font_flags: &'a mut UsedFonts,
-}
-impl TokenSink for FontSink<'_> {
-    type Handle = ();
-    fn process_token(&mut self, token: Token, _: u64) -> TokenSinkResult<Self::Handle> {
-        match token {
-            Token::TagToken(tag) => match tag.kind {
-                html5ever::tokenizer::TagKind::EndTag if &tag.name.to_ascii_lowercase() == "span" => {
-                    self.font_stack.pop();
+    let mut tokenizer = html5gum::Tokenizer::new(html);
+    while let Some(Ok(token)) = tokenizer.next() {
+        if let html5gum::Token::StartTag(tag) = token {
+            if tag.name.to_ascii_lowercase() == b"span" {
+                if let Some(Ok(class_list)) = tag.attributes.get(b"class".as_slice()).map(|s| std::str::from_utf8(&s)) {
+                    if class_list.split_whitespace().any(|class| class == "katex-html") {
+                        break;
+                    }
                 }
-                html5ever::tokenizer::TagKind::StartTag if &tag.name.to_ascii_lowercase() == "span" => {
-                    let mut last = *self.font_stack.last().unwrap();
-                    for attr in &tag.attrs {
-                        if &attr.name.local.to_ascii_lowercase() == "class" {
-                            let (mut delimsizing, mut mult, mut op_symbol) = (false, false, false);
-                            for class in attr.value.split_whitespace() {
-                                delimsizing |= class == "delimsizing";
-                                mult |= class == "mult";
-                                op_symbol |= class == "op-symbol";
-                                last.html |= class == "katex-html";
-                            }
-                            last.delimisizing_mult |= delimsizing && mult;
-                            for class in attr.value.split_whitespace() {
-                                if last.html {
-                                    font_stack_set(&mut last, class, delimsizing, op_symbol);
-                                }
-                            }
+            }
+        }
+    }
+    let mut fonts = UsedFonts::default();
+    calc_font_property(Font::default(), &mut fonts, &mut tokenizer);
+    fonts
+}
+
+// 開始タグ直後から終了タグ終わりまで読む関数
+fn calc_font_property(font: Font, font_flags: &mut UsedFonts, tokens: &mut html5gum::Tokenizer<html5gum::StringReader>) {
+    while let Some(Ok(token)) = tokens.next() {
+        match token {
+            html5gum::Token::EndTag(tag) if tag.name.to_ascii_lowercase() == b"span" => return,
+            html5gum::Token::StartTag(tag) if tag.name.to_ascii_lowercase() == b"span" => {
+                let mut child_font = font;
+                if let Some(Ok(class_list)) = tag.attributes.get(b"class".as_slice()).map(|s| std::str::from_utf8(&s)) {
+                    let (mut delimsizing, mut mult, mut op_symbol) = (false, false, false);
+                    for class in class_list.split_whitespace() {
+                        match class {
+                            "delimsizing" => delimsizing = true,
+                            "mult" => mult = true,
+                            "op-symbol" => op_symbol = true,
+                            _ => (),
                         }
                     }
-                    self.font_stack.push(last);
+                    child_font.delimisizing_mult |= delimsizing && mult;
+                    for class in class_list.split_whitespace() {
+                        font_stack_set(&mut child_font, class, delimsizing, op_symbol);
+                    }
+                    calc_font_property(child_font, font_flags, tokens);
                 }
-                _ => (),
-            },
-            Token::CharacterTokens(tendril) if !tendril.trim().is_empty() => {
-                font_flag_set(*self.font_stack.last().unwrap(), &mut self.font_flags)
             }
+            html5gum::Token::String(s) if !s.trim_ascii().is_empty() => font_flag_set(font, font_flags),
             _ => (),
         }
-        TokenSinkResult::Continue
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 struct Font {
     family: FontFamilies,
     bold: bool,
     italic: bool,
-    html: bool,
     delimisizing_mult: bool, // has span.delimsizing.mult as parent
 }
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 enum FontFamilies {
     AMS,
     Caligraphic,
     Fraktur,
+    #[default]
     Main,
     Math,
     SansSerif,
