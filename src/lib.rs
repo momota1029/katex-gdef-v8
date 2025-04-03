@@ -333,20 +333,19 @@ pub fn render_with_opts(latex: &str, options: &Options, macros: &mut BTreeMap<St
 
 #[inline(always)]
 pub fn font_extract(html: &str) -> UsedFonts {
+    let mut fonts = UsedFonts::default();
     let mut tokenizer = html5gum::Tokenizer::new(html);
     while let Some(Ok(token)) = tokenizer.next() {
-        if let html5gum::Token::StartTag(tag) = token {
-            if tag.name.to_ascii_lowercase() == b"span" {
-                if let Some(Ok(class_list)) = tag.attributes.get(b"class".as_slice()).map(|s| std::str::from_utf8(&s)) {
-                    if class_list.split_whitespace().any(|class| class == "katex-html") {
-                        break;
-                    }
-                }
-            }
+        let html5gum::Token::StartTag(tag) = token else { continue };
+        if tag.name.to_ascii_lowercase() != b"span" {
+            continue;
+        }
+        let Some(Ok(class_list)) = tag.attributes.get(b"class".as_slice()).map(|s| std::str::from_utf8(&s)) else { continue };
+        if class_list.split_whitespace().any(|class| class == "katex-html") {
+            calc_font_property(Font::default(), &mut fonts, &mut tokenizer);
+            break;
         }
     }
-    let mut fonts = UsedFonts::default();
-    calc_font_property(Font::default(), &mut fonts, &mut tokenizer);
     fonts
 }
 
@@ -355,6 +354,7 @@ fn calc_font_property(font: Font, font_flags: &mut UsedFonts, tokens: &mut html5
     while let Some(Ok(token)) = tokens.next() {
         match token {
             html5gum::Token::EndTag(tag) if tag.name.to_ascii_lowercase() == b"span" => return,
+            html5gum::Token::String(s) if !s.trim_ascii().is_empty() => font_flag_set(font, font_flags),
             html5gum::Token::StartTag(tag) if tag.name.to_ascii_lowercase() == b"span" => {
                 let mut child_font = font;
                 if let Some(Ok(class_list)) = tag.attributes.get(b"class".as_slice()).map(|s| std::str::from_utf8(&s)) {
@@ -374,7 +374,6 @@ fn calc_font_property(font: Font, font_flags: &mut UsedFonts, tokens: &mut html5
                     calc_font_property(child_font, font_flags, tokens);
                 }
             }
-            html5gum::Token::String(s) if !s.trim_ascii().is_empty() => font_flag_set(font, font_flags),
             _ => (),
         }
     }
