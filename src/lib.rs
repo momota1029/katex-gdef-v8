@@ -17,7 +17,7 @@ Add this to your Cargo.toml:
 
 ```toml
 [dependencies]
-katex-gdef-v8 = "0.1.3"
+katex-gdef-v8 = "0.1.4"
 ```
 
 ## Usage
@@ -78,20 +78,20 @@ use std::collections::HashSet;
 let html = render(r"\mathcal{F}(x) = \int_{-\infty}^{\infty} f(x) e^{-2\pi i x \xi} dx").unwrap();
 
 // Extract font information
-let font_flags = font_extract(&html);
+let used_fonts = font_extract(&html);
 
 // Check if specific fonts are used
-println!("Is empty: {}", font_flags.is_empty());
+println!("Is empty: {}", used_fonts.is_empty());
 
 // Iterate through used fonts
-for font_name in font_flags.clone() {
+for font_name in used_fonts.clone() {
     // Each font_name is the base name (e.g., "KaTeX_Math-Italic")
     // To get the complete font file name, add file extension:
     println!("Font file: {}.woff2", font_name);
 }
 
 // Collect all font names into a HashSet
-let font_set: HashSet<&str> = font_flags.collect();
+let font_set: HashSet<&str> = used_fonts.collect();
 
 // Example assertion for testing
 assert_eq!(
