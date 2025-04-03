@@ -449,7 +449,6 @@ fn font_stack_set(font: &mut Font, class: &str, delimisizing: bool, op_symbol: b
             font.family = FontFamilies::Main;
             font.italic = false
         }
-        // "mult" => font.delimisizing_mult = true,
         "size1" if delimisizing => font.family = FontFamilies::Size1,
         "size2" if delimisizing => font.family = FontFamilies::Size2,
         "size3" if delimisizing => font.family = FontFamilies::Size3,
