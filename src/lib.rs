@@ -313,7 +313,6 @@ pub fn render_with_opts(latex: &str, options: &Options, macros: &mut BTreeMap<St
         .0
         .send((Input { latex: latex.to_string(), options: options.clone(), macros: macros.clone() }, tx))
         .map_err(|_| Error::SendError)?;
-    // let out_str = ;
     match rx.recv()?? {
         Output::Success { html, macros: macros_value } => {
             *macros = macros_value;
