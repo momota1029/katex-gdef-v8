@@ -141,10 +141,13 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 mod font;
 
 #[cfg(feature = "v8")]
+#[cfg(not(feature = "qjs"))]
 mod v8;
 #[cfg(feature = "v8")]
+#[cfg(not(feature = "qjs"))]
 type Engine = v8::Engine;
 #[cfg(feature = "v8")]
+#[cfg(not(feature = "qjs"))]
 pub type JSError = v8::Error;
 
 #[cfg(feature = "qjs")]
@@ -153,6 +156,9 @@ mod qjs;
 type Engine = qjs::Engine;
 #[cfg(feature = "qjs")]
 pub type JSError = qjs::Error;
+
+#[cfg(not(any(feature = "v8", feature = "qjs")))]
+compile_error!("At least one of the features 'v8' or 'qjs' must be enabled");
 
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
