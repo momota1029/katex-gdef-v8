@@ -1,6 +1,6 @@
 [package]
 name = "katex-gdef-v8"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2024"
 license = "MIT"
 authors = ["Conashimi Momota <momota.ry2@gmail.com>"]
