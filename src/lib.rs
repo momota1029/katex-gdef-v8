@@ -17,7 +17,7 @@ Add this to your Cargo.toml:
 
 ```toml
 [dependencies]
-katex-gdef-v8 = "0.1.4"
+katex-gdef-v8 = "0.1.5"
 ```
 
 ## Usage
