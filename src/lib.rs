@@ -17,7 +17,7 @@ Add this to your Cargo.toml:
 
 ```toml
 [dependencies]
-katex-gdef-v8 = "0.1.5"
+katex-gdef-v8 = "0.1.6"
 ```
 
 ## Usage
@@ -148,14 +148,14 @@ mod v8;
 type Engine = v8::Engine;
 #[cfg(feature = "v8")]
 #[cfg(not(feature = "qjs"))]
-pub type JSError = v8::Error;
+pub use v8::Error as JSError;
 
 #[cfg(feature = "qjs")]
 mod qjs;
 #[cfg(feature = "qjs")]
 type Engine = qjs::Engine;
 #[cfg(feature = "qjs")]
-pub type JSError = qjs::Error;
+pub use qjs::Error as JSError;
 
 #[cfg(not(any(feature = "v8", feature = "qjs")))]
 compile_error!("At least one of the features 'v8' or 'qjs' must be enabled");
